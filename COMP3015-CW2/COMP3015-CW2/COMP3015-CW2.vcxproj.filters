@@ -57,5 +57,7 @@
   <ItemGroup>
     <None Include="shader\basic_uniform.frag" />
     <None Include="shader\basic_uniform.vert" />
+    <None Include="shader\shadow_depth.vert" />
+    <None Include="shader\shadow_depth.frag" />
   </ItemGroup>
 </Project>

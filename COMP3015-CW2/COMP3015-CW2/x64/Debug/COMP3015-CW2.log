@@ -1,10 +1,1 @@
-﻿  glad.c
-  glslprogram.cpp
-  glutils.cpp
-  main.cpp
-  scenebasic_uniform.cpp
-  Generating Code...
-LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
-  COMP3015-CW2.vcxproj -> G:\git\COMP3015-CW2\COMP3015-CW2\x64\Debug\COMP3015-CW2.exe
-  'pwsh.exe' is not recognized as an internal or external command,
-  operable program or batch file.
+﻿
