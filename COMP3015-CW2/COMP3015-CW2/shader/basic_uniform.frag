@@ -3,13 +3,22 @@
 in vec3 FragPos;
 in vec3 Normal;
 in vec4 FragPosLightSpace;
+in vec2 TexCoord;
 
 uniform vec3 LightPos;
 uniform vec3 ViewPos;
 uniform vec3 ObjectColor;
-uniform sampler2D ShadowMap;
 
-out vec4 FragColor;
+uniform sampler2D ShadowMap;
+uniform sampler2D DiffuseTexture;
+uniform int UseTexture;
+
+uniform vec3 FogColor;
+uniform float FogStart;
+uniform float FogEnd;
+
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 BrightColor;
 
 float ShadowCalculation(vec4 fragPosLightSpace)
 {
@@ -22,7 +31,7 @@ float ShadowCalculation(vec4 fragPosLightSpace)
     float closestDepth = texture(ShadowMap, projCoords.xy).r;
     float currentDepth = projCoords.z;
 
-    float bias = 0.005;
+    float bias = 0.006;
     float shadowAmount = currentDepth - bias > closestDepth ? 1.0 : 0.0;
 
     return shadowAmount;
@@ -30,20 +39,43 @@ float ShadowCalculation(vec4 fragPosLightSpace)
 
 void main()
 {
-    vec3 ambient = 0.35 * ObjectColor;
+    vec3 baseColor = ObjectColor;
+
+    if (UseTexture == 1) {
+        vec3 textureColor = texture(DiffuseTexture, TexCoord).rgb;
+        baseColor *= textureColor;
+    }
+
+    vec3 ambient = 0.35 * baseColor;
 
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(LightPos - FragPos);
+
     float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * ObjectColor;
+    vec3 diffuse = diff * baseColor;
 
     vec3 viewDir = normalize(ViewPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
+
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-    vec3 specular = vec3(0.45) * spec;
+    vec3 specular = vec3(0.35) * spec;
 
     float shadowAmount = ShadowCalculation(FragPosLightSpace);
 
     vec3 result = ambient + (1.0 - shadowAmount) * (diffuse + specular);
+
+    // Fog
+    float dist = length(ViewPos - FragPos);
+    float fogFactor = clamp((FogEnd - dist) / (FogEnd - FogStart), 0.0, 1.0);
+    result = mix(FogColor, result, fogFactor);
+
     FragColor = vec4(result, 1.0);
+
+    // Bloom extraction
+    float brightness = dot(result, vec3(0.2126, 0.7152, 0.0722));
+
+    if (brightness > 1.0)
+        BrightColor = vec4(result, 1.0);
+    else
+        BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
 }

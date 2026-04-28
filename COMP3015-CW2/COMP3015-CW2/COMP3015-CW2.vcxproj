@@ -147,6 +147,9 @@
   <ItemGroup>
     <None Include="shader\basic_uniform.frag" />
     <None Include="shader\basic_uniform.vert" />
+    <None Include="shader\bloom_blur.frag" />
+    <None Include="shader\bloom_final.frag" />
+    <None Include="shader\quad.vert" />
     <None Include="shader\shadow_depth.frag" />
     <None Include="shader\shadow_depth.vert" />
   </ItemGroup>
