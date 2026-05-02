@@ -34,6 +34,21 @@ private:
 
     GLuint loadTexture2D(const char* path);
 
+    GLuint rockVAO = 0;
+    GLuint rockVBO = 0;
+    GLsizei rockVertexCount = 0;
+    GLuint rockTexture = 0;
+
+    bool loadOBJMesh(const char* path, GLuint& vao, GLuint& vbo, GLsizei& vertexCount);
+    void drawRock(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
+
+    GLuint reactorVAO = 0;
+    GLuint reactorVBO = 0;
+    GLsizei reactorVertexCount = 0;
+    GLuint reactorTexture = 0;
+
+    void drawReactor(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
+
     GLSLProgram blurProg;
     GLSLProgram finalProg;
     GLSLProgram prog;
@@ -54,6 +69,17 @@ private:
     bool firstMouse;
     float mouseSensitivity;
 
+    float walkSpeed = 3.0f;
+    float runSpeed = 6.0f;
+
+    float playerEyeHeight = 1.8f;
+    float verticalVelocity = 0.0f;
+    float gravity = -14.0f;
+    float jumpStrength = 6.0f;
+
+    bool isGrounded = false;
+    bool jumpKeyPressed = false;
+
     bool bloomEnabled = true;
     bool bloomKeyPressed = false;
     float exposure = 1.0f;
@@ -70,6 +96,20 @@ private:
     float targetExposure = 1.0f;
 
     bool isPlayerNearReactor() const;
+
+    glm::vec3 hutPos = glm::vec3(-8.5f, 0.0f, 10.5f);
+
+    bool doorOpen = false;
+    bool doorKeyPressed = false;
+    float doorAngle = 0.0f;
+    float targetDoorAngle = 0.0f;
+    float doorInteractRadius = 2.2f;
+
+    float playerRadius = 0.35f;
+
+    bool isPlayerNearHutDoor() const;
+    void resolveHutCollisions();
+    void resolveAABBCollision(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize);
 
     const unsigned int SHADOW_WIDTH = 1024;
     const unsigned int SHADOW_HEIGHT = 1024;
