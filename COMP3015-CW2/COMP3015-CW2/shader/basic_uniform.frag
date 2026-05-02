@@ -45,6 +45,11 @@ void main()
         vec3 textureColor = texture(DiffuseTexture, TexCoord).rgb;
         baseColor *= textureColor;
     }
+    else if (UseTexture == 2) {
+        vec2 projectedUV = FragPos.xz * 0.45;
+        vec3 textureColor = texture(DiffuseTexture, projectedUV).rgb;
+        baseColor *= textureColor;
+    }
 
     vec3 ambient = 0.35 * baseColor;
 

@@ -7,6 +7,8 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <string>
 
 class SceneBasic_Uniform : public Scene
 {
@@ -39,13 +41,35 @@ private:
     GLsizei rockVertexCount = 0;
     GLuint rockTexture = 0;
 
+    GLSLProgram textProg;
+    GLuint textVAO = 0;
+    GLuint textVBO = 0;
+
+    void initText();
+    void renderText(float x, float y, const std::string& text, float scale, const glm::vec4& color);
+    void renderUI();
+    std::string getObjectiveText();
+
+    struct RockInstance
+    {
+        glm::vec3 position;
+        glm::vec3 scale;
+        float rotationY;
+    };
+
+    std::vector<RockInstance> rockInstances;
+
     bool loadOBJMesh(const char* path, GLuint& vao, GLuint& vbo, GLsizei& vertexCount);
     void drawRock(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
+
+    void generateRockField();
+    bool isRockSpawnBlocked(float x, float z) const;
 
     GLuint reactorVAO = 0;
     GLuint reactorVBO = 0;
     GLsizei reactorVertexCount = 0;
     GLuint reactorTexture = 0;
+    GLuint woodTexture = 0;
 
     void drawReactor(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
 
@@ -107,9 +131,28 @@ private:
 
     float playerRadius = 0.35f;
 
+    float getHutBaseY();
+    bool isPlayerOnHutPlatform() const;
+    float getPlayerGroundHeight();
+    float getPathGroundHeight();
+
     bool isPlayerNearHutDoor() const;
+
     void resolveHutCollisions();
+    void resolveRockCollisions();
     void resolveAABBCollision(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize);
+
+    GLuint energyCellVAO = 0;
+    GLuint energyCellVBO = 0;
+    GLsizei energyCellVertexCount = 0;
+
+    bool energyCellCollected = false;
+    float energyCellSpin = 0.0f;
+    float energyCellInteractRadius = 1.8f;
+
+    glm::vec3 getEnergyCellWorldPos();
+    bool isPlayerNearEnergyCell();
+    void drawEnergyCell(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
 
     const unsigned int SHADOW_WIDTH = 1024;
     const unsigned int SHADOW_HEIGHT = 1024;

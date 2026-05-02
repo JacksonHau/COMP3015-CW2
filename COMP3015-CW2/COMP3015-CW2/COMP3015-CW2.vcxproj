@@ -152,6 +152,8 @@
     <None Include="shader\quad.vert" />
     <None Include="shader\shadow_depth.frag" />
     <None Include="shader\shadow_depth.vert" />
+    <None Include="shader\text.frag" />
+    <None Include="shader\text.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

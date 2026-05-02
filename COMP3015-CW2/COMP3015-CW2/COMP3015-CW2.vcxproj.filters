@@ -62,5 +62,7 @@
     <None Include="shader\quad.vert" />
     <None Include="shader\bloom_blur.frag" />
     <None Include="shader\bloom_final.frag" />
+    <None Include="shader\text.vert" />
+    <None Include="shader\text.frag" />
   </ItemGroup>
 </Project>

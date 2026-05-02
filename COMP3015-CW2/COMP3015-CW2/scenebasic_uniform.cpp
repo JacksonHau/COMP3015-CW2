@@ -13,9 +13,13 @@ using std::endl;
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "helper/stb/stb_image.h"
+
+#define STB_EASY_FONT_IMPLEMENTATION
+#include "helper/stb/stb_easy_font.h"
 
 using glm::vec3;
 using glm::mat3;
@@ -60,6 +64,10 @@ void SceneBasic_Uniform::compile()
         finalProg.compileShader("shader/bloom_final.frag");
         finalProg.link();
 
+        textProg.compileShader("shader/text.vert");
+        textProg.compileShader("shader/text.frag");
+        textProg.link();
+
         prog.use();
         prog.setUniform("ShadowMap", 0);
         prog.setUniform("DiffuseTexture", 1);
@@ -76,6 +84,29 @@ void SceneBasic_Uniform::compile()
         cerr << e.what() << endl;
         exit(EXIT_FAILURE);
     }
+}
+
+void SceneBasic_Uniform::initText()
+{
+    glGenVertexArrays(1, &textVAO);
+    glGenBuffers(1, &textVBO);
+
+    glBindVertexArray(textVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(
+        0,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(glm::vec2),
+        (void*)0
+    );
+
+    glBindVertexArray(0);
 }
 
 void SceneBasic_Uniform::initScene()
@@ -162,19 +193,180 @@ void SceneBasic_Uniform::initScene()
 
     initShadowMap();
     initBloom();
+    initText();
 
     buildTerrain();
     grassTexture = loadTexture2D("assets/textures/grass.png");
+    woodTexture = loadTexture2D("assets/textures/wood.jpg");
 
     rockTexture = loadTexture2D("assets/textures/stylized_rocks_albedo.jpg");
     loadOBJMesh("assets/models/rock.obj", rockVAO, rockVBO, rockVertexCount);
+    generateRockField();
 
     reactorTexture = loadTexture2D("assets/textures/reactor_basecolor.png");
     loadOBJMesh("assets/models/reactor.obj", reactorVAO, reactorVBO, reactorVertexCount);
 
+    loadOBJMesh("assets/models/energy_cell.obj", energyCellVAO, energyCellVBO, energyCellVertexCount);
+
     prog.use();
     prog.setUniform("LightPos", lightPos);
     prog.setUniform("ShadowMap", 0);
+}
+
+std::string SceneBasic_Uniform::getObjectiveText()
+{
+    if (reactorActivated) {
+        return "Objective Complete: Reactor Activated";
+    }
+
+    if (!energyCellCollected && isPlayerNearEnergyCell()) {
+        return "Press E to Collect Energy Cell";
+    }
+
+    if (!energyCellCollected && isPlayerNearHutDoor()) {
+        return "Press E to Open Hut Door";
+    }
+
+    if (!energyCellCollected) {
+        return "Objective: Find the Energy Cell in the Hut";
+    }
+
+    if (isPlayerNearReactor()) {
+        return "Press E to Activate Reactor";
+    }
+
+    return "Objective: Return to the Reactor";
+}
+
+void SceneBasic_Uniform::renderText(float x, float y, const std::string& text, float scale, const glm::vec4& color)
+{
+    if (text.empty() || textVAO == 0 || textVBO == 0) {
+        return;
+    }
+
+    struct StbVertex
+    {
+        float x;
+        float y;
+        float z;
+        unsigned char color[4];
+    };
+
+    char buffer[99999];
+
+    int quadCount = stb_easy_font_print(
+        0.0f,
+        0.0f,
+        const_cast<char*>(text.c_str()),
+        nullptr,
+        buffer,
+        sizeof(buffer)
+    );
+
+    if (quadCount <= 0) {
+        return;
+    }
+
+    StbVertex* stbVertices = reinterpret_cast<StbVertex*>(buffer);
+
+    std::vector<glm::vec2> triangleVertices;
+    triangleVertices.reserve(quadCount * 6);
+
+    auto addVertex = [&](const StbVertex& v)
+        {
+            triangleVertices.push_back(glm::vec2(
+                x + v.x * scale,
+                y + v.y * scale
+            ));
+        };
+
+    for (int i = 0; i < quadCount; i++) {
+        StbVertex& v0 = stbVertices[i * 4 + 0];
+        StbVertex& v1 = stbVertices[i * 4 + 1];
+        StbVertex& v2 = stbVertices[i * 4 + 2];
+        StbVertex& v3 = stbVertices[i * 4 + 3];
+
+        addVertex(v0);
+        addVertex(v1);
+        addVertex(v2);
+
+        addVertex(v0);
+        addVertex(v2);
+        addVertex(v3);
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    textProg.use();
+
+    glm::mat4 textProjection = glm::ortho(
+        0.0f,
+        static_cast<float>(width),
+        static_cast<float>(height),
+        0.0f
+    );
+
+    textProg.setUniform("ProjectionMatrix", textProjection);
+    textProg.setUniform("TextColor", color);
+
+    glBindVertexArray(textVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        triangleVertices.size() * sizeof(glm::vec2),
+        triangleVertices.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(triangleVertices.size()));
+
+    glBindVertexArray(0);
+
+    glDisable(GL_BLEND);
+}
+
+void SceneBasic_Uniform::renderUI()
+{
+    std::string objectiveText = getObjectiveText();
+
+    // Black shadow/background text
+    renderText(
+        24.0f,
+        28.0f,
+        objectiveText,
+        2.0f,
+        glm::vec4(0.0f, 0.0f, 0.0f, 0.85f)
+    );
+
+    // Main white text
+    renderText(
+        22.0f,
+        26.0f,
+        objectiveText,
+        2.0f,
+        glm::vec4(1.0f, 1.0f, 0.85f, 1.0f)
+    );
+
+    std::string controls = "WASD Move | Shift Run | Space Jump | E Interact | B Bloom | P Pause";
+
+    renderText(
+        22.0f,
+        static_cast<float>(height) - 42.0f,
+        controls,
+        1.35f,
+        glm::vec4(0.0f, 0.0f, 0.0f, 0.85f)
+    );
+
+    renderText(
+        20.0f,
+        static_cast<float>(height) - 44.0f,
+        controls,
+        1.35f,
+        glm::vec4(0.85f, 0.9f, 1.0f, 1.0f)
+    );
 }
 
 void SceneBasic_Uniform::processInput(float dt)
@@ -248,10 +440,27 @@ void SceneBasic_Uniform::processInput(float dt)
     }
 
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS && !interactKeyPressed) {
-        if (isPlayerNearReactor() && !reactorActivated) {
-            reactorActivated = true;
-            targetExposure = 1.4f;
+
+        // Collect Energy Cell
+        if (!energyCellCollected && isPlayerNearEnergyCell()) {
+            energyCellCollected = true;
+            targetExposure = 1.15f;
         }
+
+        // Open/close hut door
+        else if (isPlayerNearHutDoor()) {
+            doorOpen = !doorOpen;
+            targetDoorAngle = doorOpen ? -75.0f : 0.0f;
+        }
+
+        // Activate reactor only after collecting Energy Cell
+        else if (isPlayerNearReactor() && !reactorActivated) {
+            if (energyCellCollected) {
+                reactorActivated = true;
+                targetExposure = 1.4f;
+            }
+        }
+
         interactKeyPressed = true;
     }
 
@@ -259,20 +468,8 @@ void SceneBasic_Uniform::processInput(float dt)
         interactKeyPressed = false;
     }
 
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS && !doorKeyPressed) {
-        if (isPlayerNearHutDoor()) {
-            doorOpen = !doorOpen;
-            targetDoorAngle = doorOpen ? -75.0f : 0.0f;
-        }
-        doorKeyPressed = true;
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_RELEASE) {
-        doorKeyPressed = false;
-    }
-
-    // Push player out of hut walls/closed door
     resolveHutCollisions();
+    resolveRockCollisions();
 
     // Keep player inside the designed map area
     cameraPos.x = glm::clamp(cameraPos.x, -35.0f, 35.0f);
@@ -283,7 +480,7 @@ void SceneBasic_Uniform::processInput(float dt)
     cameraPos.y += verticalVelocity * dt;
 
     // Player stands on the terrain height plus eye height
-    float groundY = getTerrainHeight(cameraPos.x, cameraPos.z) + playerEyeHeight;
+    float groundY = getPlayerGroundHeight() + playerEyeHeight;
 
     if (cameraPos.y <= groundY) {
         cameraPos.y = groundY;
@@ -302,6 +499,7 @@ void SceneBasic_Uniform::update(float t)
     exposure = glm::mix(exposure, targetExposure, 0.05f);
 
     doorAngle = glm::mix(doorAngle, targetDoorAngle, 0.08f);
+    energyCellSpin = t * 90.0f;
 
     if (animating()) {
         float pulseSpeed = reactorActivated ? 5.0f : 2.0f;
@@ -309,12 +507,7 @@ void SceneBasic_Uniform::update(float t)
     }
 
     if (window) {
-        if (reactorActivated)
-            glfwSetWindowTitle(window, "SceneCW2Demo - Reactor Activated");
-        else if (isPlayerNearReactor())
-            glfwSetWindowTitle(window, "SceneCW2Demo - Press E to Activate Reactor");
-        else
-            glfwSetWindowTitle(window, "SceneCW2Demo - Find the Reactor");
+        glfwSetWindowTitle(window, "SceneCW2Demo");
     }
 }
 
@@ -347,7 +540,7 @@ void SceneBasic_Uniform::render()
 
     glEnable(GL_DEPTH_TEST);
 
-    // Pass 1: shadow depth
+    // Shadow depth
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -358,7 +551,7 @@ void SceneBasic_Uniform::render()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // Pass 2: scene into HDR framebuffer
+    // Scene into HDR framebuffer
     glViewport(0, 0, width, height);
     glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -382,7 +575,7 @@ void SceneBasic_Uniform::render()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // Pass 3: blur bright buffer
+    // Blur bright buffer
     glDisable(GL_DEPTH_TEST);
 
     bool horizontal = true;
@@ -406,7 +599,7 @@ void SceneBasic_Uniform::render()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // Pass 4: final composite
+    // Final composite
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     finalProg.use();
@@ -420,6 +613,7 @@ void SceneBasic_Uniform::render()
     glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[!horizontal]);
 
     renderQuad();
+    renderUI();
 }
 
 void SceneBasic_Uniform::initShadowMap()
@@ -942,12 +1136,10 @@ void SceneBasic_Uniform::drawRock(GLSLProgram& shader, bool depthPass, const glm
 
 void SceneBasic_Uniform::resolveAABBCollision(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize)
 {
-    // Player is treated as a small circle on the XZ plane.
     glm::vec2 playerPos(cameraPos.x, cameraPos.z);
     glm::vec2 boxPos(boxCenter.x, boxCenter.z);
     glm::vec2 halfSize(boxHalfSize.x, boxHalfSize.z);
 
-    // Closest point on the box to the player.
     glm::vec2 closestPoint;
     closestPoint.x = glm::clamp(playerPos.x, boxPos.x - halfSize.x, boxPos.x + halfSize.x);
     closestPoint.y = glm::clamp(playerPos.y, boxPos.y - halfSize.y, boxPos.y + halfSize.y);
@@ -955,7 +1147,6 @@ void SceneBasic_Uniform::resolveAABBCollision(const glm::vec3& boxCenter, const 
     glm::vec2 difference = playerPos - closestPoint;
     float distance = glm::length(difference);
 
-    // If the player overlaps the box, push them out.
     if (distance < playerRadius && distance > 0.0001f) {
         glm::vec2 pushDir = glm::normalize(difference);
         glm::vec2 correctedPos = closestPoint + pushDir * playerRadius;
@@ -964,14 +1155,112 @@ void SceneBasic_Uniform::resolveAABBCollision(const glm::vec3& boxCenter, const 
         cameraPos.z = correctedPos.y;
     }
     else if (distance <= 0.0001f) {
-        // Rare case where player is exactly inside the wall centre.
         cameraPos.z += playerRadius;
     }
 }
 
+float SceneBasic_Uniform::getHutBaseY()
+{
+    // Matches the hut base footprint.
+    const float halfWidth = 3.1f;
+    const float halfDepth = 2.7f;
+
+    float x = hutPos.x;
+    float z = hutPos.z;
+
+    float h0 = getTerrainHeight(x, z);
+    float h1 = getTerrainHeight(x - halfWidth, z - halfDepth);
+    float h2 = getTerrainHeight(x + halfWidth, z - halfDepth);
+    float h3 = getTerrainHeight(x - halfWidth, z + halfDepth);
+    float h4 = getTerrainHeight(x + halfWidth, z + halfDepth);
+
+    float highest = glm::max(h0, glm::max(glm::max(h1, h2), glm::max(h3, h4)));
+
+    // Small lift so the hut sits on top of the grass.
+    return highest + 0.08f;
+}
+
+bool SceneBasic_Uniform::isPlayerOnHutPlatform() const
+{
+    // Slightly smaller than the visible platform so stepping on/off feels natural.
+    const float halfWidth = 3.0f;
+    const float halfDepth = 2.55f;
+
+    return cameraPos.x > hutPos.x - halfWidth &&
+        cameraPos.x < hutPos.x + halfWidth &&
+        cameraPos.z > hutPos.z - halfDepth &&
+        cameraPos.z < hutPos.z + halfDepth;
+}
+
+float SceneBasic_Uniform::getPlayerGroundHeight()
+{
+    float terrainY = getTerrainHeight(cameraPos.x, cameraPos.z);
+    float finalGroundY = terrainY;
+
+    // Hut platform ground
+    if (isPlayerOnHutPlatform()) {
+        float hutPlatformTopY = getHutBaseY() + 0.36f;
+        finalGroundY = glm::max(finalGroundY, hutPlatformTopY);
+    }
+
+    // Path slab ground
+    float pathY = getPathGroundHeight();
+    if (pathY > -999.0f) {
+        finalGroundY = glm::max(finalGroundY, pathY);
+    }
+
+    return finalGroundY;
+}
+
+float SceneBasic_Uniform::getPathGroundHeight()
+{
+    struct PathSlab
+    {
+        float x;
+        float z;
+        glm::vec3 scale;
+    };
+
+    // These must match your path slabs in renderScene()
+    PathSlab slabs[] = {
+        {  0.0f, 15.0f, glm::vec3(2.1f, 0.14f, 1.1f) },
+        { -0.4f, 12.8f, glm::vec3(1.6f, 0.12f, 0.9f) },
+        {  0.5f, 10.6f, glm::vec3(1.9f, 0.12f, 1.0f) },
+        { -0.2f,  8.4f, glm::vec3(1.5f, 0.12f, 0.9f) },
+        {  0.4f,  6.2f, glm::vec3(1.8f, 0.12f, 0.9f) },
+        { -0.3f,  4.0f, glm::vec3(1.4f, 0.12f, 0.8f) },
+        {  0.2f,  2.1f, glm::vec3(1.5f, 0.12f, 0.8f) }
+    };
+
+    float highestPathY = -9999.0f;
+
+    for (const PathSlab& slab : slabs) {
+        float halfX = slab.scale.x * 0.5f;
+        float halfZ = slab.scale.z * 0.5f;
+
+        // Small tolerance so the player does not jitter at the slab edges
+        float edgeTolerance = playerRadius * 0.5f;
+
+        bool onSlab =
+            cameraPos.x >= slab.x - halfX - edgeTolerance &&
+            cameraPos.x <= slab.x + halfX + edgeTolerance &&
+            cameraPos.z >= slab.z - halfZ - edgeTolerance &&
+            cameraPos.z <= slab.z + halfZ + edgeTolerance;
+
+        if (onSlab) {
+            // Path slab is drawn at terrain height + half scale,
+            // so its top surface is terrain height + full scale.y
+            float slabTopY = getTerrainHeight(slab.x, slab.z) + slab.scale.y;
+            highestPathY = glm::max(highestPathY, slabTopY);
+        }
+    }
+
+    return highestPathY;
+}
+
 void SceneBasic_Uniform::resolveHutCollisions()
 {
-    float hutY = getTerrainHeight(hutPos.x, hutPos.z);
+    float hutY = getHutBaseY();
 
     // Hut dimensions must match your current draw code.
     float frontZ = hutPos.z + 2.35f;
@@ -1016,6 +1305,35 @@ void SceneBasic_Uniform::resolveHutCollisions()
     }
 }
 
+void SceneBasic_Uniform::resolveRockCollisions()
+{
+    glm::vec2 playerXZ(cameraPos.x, cameraPos.z);
+
+    for (const RockInstance& rock : rockInstances) {
+        glm::vec2 rockXZ(rock.position.x, rock.position.z);
+
+        float rockRadius = glm::max(rock.scale.x, rock.scale.z) * 0.75f;
+        float minDistance = playerRadius + rockRadius;
+
+        glm::vec2 difference = playerXZ - rockXZ;
+        float distance = glm::length(difference);
+
+        if (distance < minDistance && distance > 0.0001f) {
+            glm::vec2 pushDir = glm::normalize(difference);
+            glm::vec2 correctedPos = rockXZ + pushDir * minDistance;
+
+            cameraPos.x = correctedPos.x;
+            cameraPos.z = correctedPos.y;
+
+            playerXZ = correctedPos;
+        }
+        else if (distance <= 0.0001f) {
+            cameraPos.x += minDistance;
+            playerXZ.x = cameraPos.x;
+        }
+    }
+}
+
 void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY)
 {
     if (reactorVAO == 0 || reactorVertexCount <= 0) return;
@@ -1046,7 +1364,6 @@ void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const 
 
         shader.setUniform("NormalMatrix", normalMatrix);
 
-        // Texture is multiplied by an HDR colour so the reactor still blooms.
         shader.setUniform("ObjectColor", reactorColor);
         shader.setUniform("UseTexture", 1);
 
@@ -1056,6 +1373,136 @@ void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const 
 
     glBindVertexArray(reactorVAO);
     glDrawArrays(GL_TRIANGLES, 0, reactorVertexCount);
+    glBindVertexArray(0);
+}
+
+bool SceneBasic_Uniform::isRockSpawnBlocked(float x, float z) const
+{
+    float reactorDist = glm::length(glm::vec2(x, z) - glm::vec2(0.0f, 0.0f));
+    if (reactorDist < 6.5f) {
+        return true;
+    }
+
+    bool onPath =
+        std::abs(x) < 2.8f &&
+        z > 1.0f &&
+        z < 18.5f;
+
+    if (onPath) {
+        return true;
+    }
+
+    bool nearHut =
+        std::abs(x - hutPos.x) < 5.8f &&
+        std::abs(z - hutPos.z) < 5.0f;
+
+    if (nearHut) {
+        return true;
+    }
+
+    float spawnDist = glm::length(glm::vec2(x, z) - glm::vec2(0.0f, 18.0f));
+    if (spawnDist < 4.5f) {
+        return true;
+    }
+
+    return false;
+}
+
+void SceneBasic_Uniform::generateRockField()
+{
+    rockInstances.clear();
+
+    std::mt19937 rng(1337);
+
+    std::uniform_real_distribution<float> posX(-32.0f, 32.0f);
+    std::uniform_real_distribution<float> posZ(-30.0f, 30.0f);
+    std::uniform_real_distribution<float> scaleXZ(0.55f, 1.55f);
+    std::uniform_real_distribution<float> scaleY(0.55f, 1.35f);
+    std::uniform_real_distribution<float> rotY(0.0f, 360.0f);
+
+    const int targetRockCount = 20;
+    int attempts = 0;
+
+    while (rockInstances.size() < targetRockCount && attempts < 1000) {
+        attempts++;
+
+        float x = posX(rng);
+        float z = posZ(rng);
+
+        if (isRockSpawnBlocked(x, z)) {
+            continue;
+        }
+
+        float sx = scaleXZ(rng);
+        float sy = scaleY(rng);
+        float sz = scaleXZ(rng);
+
+        glm::vec3 scale(sx, sy, sz);
+
+        float y = getTerrainHeight(x, z) + 0.65f * sy;
+
+        RockInstance rock;
+        rock.position = glm::vec3(x, y, z);
+        rock.scale = scale;
+        rock.rotationY = rotY(rng);
+
+        rockInstances.push_back(rock);
+    }
+
+    std::cout << "Generated " << rockInstances.size() << " procedural rocks" << std::endl;
+}
+
+glm::vec3 SceneBasic_Uniform::getEnergyCellWorldPos()
+{
+    float hutY = getHutBaseY();
+    float platformTopY = hutY + 0.36f;
+
+    // Inside hut, slightly to the right and back from the door
+    return glm::vec3(
+        hutPos.x + 1.25f,
+        platformTopY + 0.75f,
+        hutPos.z - 0.75f
+    );
+}
+
+bool SceneBasic_Uniform::isPlayerNearEnergyCell()
+{
+    glm::vec3 cellPos = getEnergyCellWorldPos();
+
+    glm::vec2 playerXZ(cameraPos.x, cameraPos.z);
+    glm::vec2 cellXZ(cellPos.x, cellPos.z);
+
+    float dist = glm::length(playerXZ - cellXZ);
+    return dist <= energyCellInteractRadius;
+}
+
+void SceneBasic_Uniform::drawEnergyCell(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY)
+{
+    if (energyCellVAO == 0 || energyCellVertexCount <= 0) return;
+
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::rotate(model, glm::radians(rotationY), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::scale(model, scale);
+
+    shader.setUniform("ModelMatrix", model);
+
+    if (!depthPass) {
+        glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
+
+        glm::vec3 cellColor = glm::mix(
+            glm::vec3(1.8f, 2.4f, 0.8f),
+            glm::vec3(3.0f, 3.8f, 1.2f),
+            corePulse
+        );
+
+        shader.setUniform("NormalMatrix", normalMatrix);
+        shader.setUniform("ObjectColor", cellColor);
+        shader.setUniform("UseTexture", 0);
+    }
+
+    glBindVertexArray(energyCellVAO);
+    glDrawArrays(GL_TRIANGLES, 0, energyCellVertexCount);
     glBindVertexArray(0);
 }
 
@@ -1089,22 +1536,52 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
             draw(glm::vec3(x, y, z), scale, color);
         };
 
+    auto drawTexturedGroundBlock = [&](float x, float z, const glm::vec3& scale, const glm::vec3& tint)
+        {
+            float y = getTerrainHeight(x, z) + (scale.y * 0.5f);
+
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, glm::vec3(x, y, z));
+            model = glm::scale(model, scale);
+
+            shader.setUniform("ModelMatrix", model);
+
+            if (!depthPass) {
+                glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
+                shader.setUniform("NormalMatrix", normalMatrix);
+                shader.setUniform("ObjectColor", tint);
+
+                shader.setUniform("UseTexture", 2);
+
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, woodTexture);
+            }
+
+            glBindVertexArray(vaoHandle);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glBindVertexArray(0);
+        };
+
     auto drawRockOnGround = [&](float x, float z, const glm::vec3& scale, float rotationY)
         {
             float y = getTerrainHeight(x, z) + 0.65f * scale.y;
             drawRock(shader, depthPass, glm::vec3(x, y, z), scale, rotationY);
         };
 
-    // Broken stone path leading from spawn toward the reactor
-    glm::vec3 pathColor = glm::vec3(0.12f, 0.12f, 0.11f);
+    for (const RockInstance& rock : rockInstances) {
+        drawRock(shader, depthPass, rock.position, rock.scale, rock.rotationY);
+    }
 
-    drawGroundBlock(0.0f, 15.0f, glm::vec3(2.1f, 0.14f, 1.1f), pathColor);
-    drawGroundBlock(-0.4f, 12.8f, glm::vec3(1.6f, 0.12f, 0.9f), pathColor);
-    drawGroundBlock(0.5f, 10.6f, glm::vec3(1.9f, 0.12f, 1.0f), pathColor);
-    drawGroundBlock(-0.2f, 8.4f, glm::vec3(1.5f, 0.12f, 0.9f), pathColor);
-    drawGroundBlock(0.4f, 6.2f, glm::vec3(1.8f, 0.12f, 0.9f), pathColor);
-    drawGroundBlock(-0.3f, 4.0f, glm::vec3(1.4f, 0.12f, 0.8f), pathColor);
-    drawGroundBlock(0.2f, 2.1f, glm::vec3(1.5f, 0.12f, 0.8f), pathColor);
+    // Broken stone path leading from spawn toward the reactor
+    glm::vec3 pathTint = glm::vec3(0.75f, 0.68f, 0.55f);
+
+    drawTexturedGroundBlock(0.0f, 15.0f, glm::vec3(2.1f, 0.14f, 1.1f), pathTint);
+    drawTexturedGroundBlock(-0.4f, 12.8f, glm::vec3(1.6f, 0.12f, 0.9f), pathTint);
+    drawTexturedGroundBlock(0.5f, 10.6f, glm::vec3(1.9f, 0.12f, 1.0f), pathTint);
+    drawTexturedGroundBlock(-0.2f, 8.4f, glm::vec3(1.5f, 0.12f, 0.9f), pathTint);
+    drawTexturedGroundBlock(0.4f, 6.2f, glm::vec3(1.8f, 0.12f, 0.9f), pathTint);
+    drawTexturedGroundBlock(-0.3f, 4.0f, glm::vec3(1.4f, 0.12f, 0.8f), pathTint);
+    drawTexturedGroundBlock(0.2f, 2.1f, glm::vec3(1.5f, 0.12f, 0.8f), pathTint);
 
     // Reactor platform
     draw(glm::vec3(0.0f, -0.15f, 0.0f), glm::vec3(2.8f, 0.4f, 2.8f), glm::vec3(0.28f, 0.28f, 0.34f));
@@ -1127,27 +1604,9 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     glm::vec3 darkRock = glm::vec3(0.18f, 0.18f, 0.19f);
     glm::vec3 midRock = glm::vec3(0.25f, 0.24f, 0.23f);
 
-    // Left-side ruin cluster
-    drawGroundBlock(-5.5f, 4.0f, glm::vec3(1.2f, 2.4f, 1.0f), ruinColor);
-    drawRockOnGround(-7.0f, 2.4f, glm::vec3(1.0f, 0.9f, 1.0f), 25.0f);
-    drawRockOnGround(-4.5f, 1.6f, glm::vec3(0.75f, 0.8f, 0.75f), -35.0f);
-    drawGroundBlock(-6.3f, -1.5f, glm::vec3(1.0f, 1.8f, 1.0f), ruinColor);
-
-    // Right-side ruin cluster
-    drawGroundBlock(5.5f, 3.0f, glm::vec3(1.0f, 2.6f, 1.0f), ruinColor);
-    drawRockOnGround(7.2f, 1.2f, glm::vec3(1.1f, 1.0f, 1.1f), 70.0f);
-    drawRockOnGround(4.2f, -2.0f, glm::vec3(0.85f, 0.9f, 0.85f), 15.0f);
-    drawGroundBlock(6.5f, -4.0f, glm::vec3(0.8f, 2.2f, 0.8f), ruinColor);
-
-    // Distant terrain landmarks
-    drawRockOnGround(-12.0f, -8.0f, glm::vec3(1.6f, 1.8f, 1.6f), 20.0f);
-    drawRockOnGround(11.0f, -6.5f, glm::vec3(1.3f, 1.5f, 1.3f), -55.0f);
-    drawRockOnGround(-10.0f, 10.0f, glm::vec3(1.7f, 1.3f, 1.7f), 100.0f);
-    drawRockOnGround(12.0f, 12.0f, glm::vec3(1.4f, 1.6f, 1.4f), -20.0f);
-
 	// Simple hut structure near the reactor
     glm::vec3 hutBase = hutPos;
-    float hutY = getTerrainHeight(hutBase.x, hutBase.z);
+    float hutY = getHutBaseY();
 
     glm::vec3 woodColor = glm::vec3(0.32f, 0.22f, 0.13f);
     glm::vec3 wallColor = glm::vec3(0.46f, 0.42f, 0.34f);
@@ -1156,8 +1615,8 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     glm::vec3 doorColor = glm::vec3(0.34f, 0.20f, 0.10f);
 
     // Base platform
-    draw(glm::vec3(hutBase.x, hutY + 0.12f, hutBase.z),
-        glm::vec3(6.0f, 0.24f, 5.2f),
+    draw(glm::vec3(hutBase.x, hutY + 0.18f, hutBase.z),
+        glm::vec3(6.2f, 0.36f, 5.4f),
         floorColor);
 
     // Back wall
@@ -1200,7 +1659,7 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     float doorWidth = 1.20f;
     float doorHeight = 2.75f;
     float sideWallWidth = (frontWallWidth - doorWidth) * 0.5f;
-    float openingCenterX = hutBase.x;   // centered door
+    float openingCenterX = hutBase.x;
 
     // Main front wall side pieces
     draw(glm::vec3(openingCenterX - (doorWidth * 0.5f + sideWallWidth * 0.5f),
@@ -1226,7 +1685,7 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     glm::vec3 doorCenter = glm::vec3(
         openingCenterX,
         platformTopY + doorHeight * 0.5f,
-        frontZ + 0.05f   // slightly in front so it doesn't clip
+        frontZ + 0.15f
     );
 
     glm::mat4 doorModel = glm::mat4(1.0f);
@@ -1251,6 +1710,17 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     glBindVertexArray(vaoHandle);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
+
+    // Energy Cell inside hut
+    if (!energyCellCollected) {
+        drawEnergyCell(
+            shader,
+            depthPass,
+            getEnergyCellWorldPos(),
+            glm::vec3(0.35f, 0.35f, 0.35f),
+            energyCellSpin
+        );
+    }
 }
 
 void SceneBasic_Uniform::resize(int w, int h)
