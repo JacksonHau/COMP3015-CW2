@@ -470,6 +470,7 @@ void SceneBasic_Uniform::processInput(float dt)
 
     resolveHutCollisions();
     resolveRockCollisions();
+    resolveReactorCollisions();
 
     // Keep player inside the designed map area
     cameraPos.x = glm::clamp(cameraPos.x, -35.0f, 35.0f);
@@ -1209,6 +1210,12 @@ float SceneBasic_Uniform::getPlayerGroundHeight()
         finalGroundY = glm::max(finalGroundY, pathY);
     }
 
+    // Reactor platform ground
+    float reactorY = getReactorPlatformGroundHeight();
+    if (reactorY > -999.0f) {
+        finalGroundY = glm::max(finalGroundY, reactorY);
+    }
+
     return finalGroundY;
 }
 
@@ -1334,6 +1341,63 @@ void SceneBasic_Uniform::resolveRockCollisions()
     }
 }
 
+void SceneBasic_Uniform::resolveReactorCollisions()
+{
+    float reactorGroundY = getTerrainHeight(0.0f, 0.0f);
+
+    float baseHeight = 0.95f;
+    float topHeight = 0.22f;
+
+    float baseTopY = reactorGroundY + baseHeight;
+    float topTopY = baseTopY + topHeight;
+
+    float playerFeetY = cameraPos.y - playerEyeHeight;
+
+    auto resolvePlatformSide = [&](const glm::vec3& boxCenter, const glm::vec3& boxHalfSize, float topY)
+        {
+            // If the player is already standing on top, do not push them sideways.
+            if (playerFeetY >= topY - 0.12f) {
+                return;
+            }
+
+            resolveAABBCollision(boxCenter, boxHalfSize);
+        };
+
+    // Big bottom reactor base side collision
+    resolvePlatformSide(
+        glm::vec3(0.0f, reactorGroundY + baseHeight * 0.5f, 0.0f),
+        glm::vec3(1.6f, baseHeight * 0.5f, 1.6f),
+        baseTopY
+    );
+
+    // Smaller top platform side collision
+    resolvePlatformSide(
+        glm::vec3(0.0f, baseTopY + topHeight * 0.5f, 0.0f),
+        glm::vec3(0.95f, topHeight * 0.5f, 0.95f),
+        topTopY
+    );
+
+    // Reactor model collision on top
+    if (playerFeetY >= topTopY - 0.15f) {
+        glm::vec2 playerXZ(cameraPos.x, cameraPos.z);
+        glm::vec2 reactorXZ(0.0f, 0.0f);
+
+        float reactorRadius = 0.55f;
+        float minDistance = playerRadius + reactorRadius;
+
+        glm::vec2 difference = playerXZ - reactorXZ;
+        float distance = glm::length(difference);
+
+        if (distance < minDistance && distance > 0.0001f) {
+            glm::vec2 pushDir = glm::normalize(difference);
+            glm::vec2 correctedPos = reactorXZ + pushDir * minDistance;
+
+            cameraPos.x = correctedPos.x;
+            cameraPos.z = correctedPos.y;
+        }
+    }
+}
+
 void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY)
 {
     if (reactorVAO == 0 || reactorVertexCount <= 0) return;
@@ -1374,6 +1438,39 @@ void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const 
     glBindVertexArray(reactorVAO);
     glDrawArrays(GL_TRIANGLES, 0, reactorVertexCount);
     glBindVertexArray(0);
+}
+
+float SceneBasic_Uniform::getReactorPlatformGroundHeight()
+{
+    float reactorGroundY = getTerrainHeight(0.0f, 0.0f);
+
+    float baseHeight = 0.95f;
+    float topHeight = 0.22f;
+
+    float baseTopY = reactorGroundY + baseHeight;
+    float topTopY = baseTopY + topHeight;
+
+    glm::vec2 playerXZ(cameraPos.x, cameraPos.z);
+
+    // Big bottom base footprint
+    bool onBase =
+        playerXZ.x >= -1.6f && playerXZ.x <= 1.6f &&
+        playerXZ.y >= -1.6f && playerXZ.y <= 1.6f;
+
+    // Smaller top platform footprint
+    bool onTop =
+        playerXZ.x >= -0.95f && playerXZ.x <= 0.95f &&
+        playerXZ.y >= -0.95f && playerXZ.y <= 0.95f;
+
+    if (onTop) {
+        return topTopY;
+    }
+
+    if (onBase) {
+        return baseTopY;
+    }
+
+    return -9999.0f;
 }
 
 bool SceneBasic_Uniform::isRockSpawnBlocked(float x, float z) const
@@ -1583,15 +1680,34 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
     drawTexturedGroundBlock(-0.3f, 4.0f, glm::vec3(1.4f, 0.12f, 0.8f), pathTint);
     drawTexturedGroundBlock(0.2f, 2.1f, glm::vec3(1.5f, 0.12f, 0.8f), pathTint);
 
-    // Reactor platform
-    draw(glm::vec3(0.0f, -0.15f, 0.0f), glm::vec3(2.8f, 0.4f, 2.8f), glm::vec3(0.28f, 0.28f, 0.34f));
-    draw(glm::vec3(0.0f, 0.15f, 0.0f), glm::vec3(1.8f, 0.2f, 1.8f), glm::vec3(0.38f, 0.38f, 0.44f));
+    // Reactor platform, grounded properly on the terrain
+    float reactorGroundY = getTerrainHeight(0.0f, 0.0f);
 
-    // Reactor model replacing the old glowing cube
+    float baseHeight = 0.95f;
+    float topHeight = 0.22f;
+
+    float baseTopY = reactorGroundY + baseHeight;
+    float topTopY = baseTopY + topHeight;
+
+    // Large bottom base, now reaches the grass
+    draw(
+        glm::vec3(0.0f, reactorGroundY + baseHeight * 0.5f, 0.0f),
+        glm::vec3(3.2f, baseHeight, 3.2f),
+        glm::vec3(0.28f, 0.28f, 0.34f)
+    );
+
+    // Smaller top platform
+    draw(
+        glm::vec3(0.0f, baseTopY + topHeight * 0.5f, 0.0f),
+        glm::vec3(1.9f, topHeight, 1.9f),
+        glm::vec3(0.38f, 0.38f, 0.44f)
+    );
+
+    // Reactor model sitting on top of the platform
     drawReactor(
         shader,
         depthPass,
-        glm::vec3(0.0f, 0.95f, 0.0f),
+        glm::vec3(0.0f, topTopY + 0.65f, 0.0f),
         glm::vec3(0.25f, 0.25f, 0.25f),
         corePulse * 20.0f
     );

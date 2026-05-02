@@ -141,6 +141,9 @@ private:
     void resolveHutCollisions();
     void resolveRockCollisions();
     void resolveAABBCollision(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize);
+    void resolveReactorCollisions();
+
+    float getReactorPlatformGroundHeight();
 
     GLuint energyCellVAO = 0;
     GLuint energyCellVBO = 0;
