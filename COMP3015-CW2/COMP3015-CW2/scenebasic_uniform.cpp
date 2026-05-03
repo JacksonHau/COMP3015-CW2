@@ -199,7 +199,7 @@ void SceneBasic_Uniform::initScene()
     grassTexture = loadTexture2D("assets/textures/grass.png");
     woodTexture = loadTexture2D("assets/textures/wood.jpg");
 
-    rockTexture = loadTexture2D("assets/textures/stylized_rocks_albedo.jpg");
+    rockTexture = loadTexture2D("assets/textures/rock.png");
     loadOBJMesh("assets/models/rock.obj", rockVAO, rockVBO, rockVertexCount);
     generateRockField();
 
@@ -1123,7 +1123,7 @@ void SceneBasic_Uniform::drawRock(GLSLProgram& shader, bool depthPass, const glm
         glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
 
         shader.setUniform("NormalMatrix", normalMatrix);
-        shader.setUniform("ObjectColor", glm::vec3(0.85f, 0.85f, 0.85f));
+        shader.setUniform("ObjectColor", glm::vec3(0.65f, 0.62f, 0.56f));
         shader.setUniform("UseTexture", 1);
 
         glActiveTexture(GL_TEXTURE1);
@@ -1319,7 +1319,7 @@ void SceneBasic_Uniform::resolveRockCollisions()
     for (const RockInstance& rock : rockInstances) {
         glm::vec2 rockXZ(rock.position.x, rock.position.z);
 
-        float rockRadius = glm::max(rock.scale.x, rock.scale.z) * 0.75f;
+        float rockRadius = glm::max(rock.scale.x, rock.scale.z) * 1.45f;
         float minDistance = playerRadius + rockRadius;
 
         glm::vec2 difference = playerXZ - rockXZ;
@@ -1513,11 +1513,11 @@ void SceneBasic_Uniform::generateRockField()
 
     std::uniform_real_distribution<float> posX(-32.0f, 32.0f);
     std::uniform_real_distribution<float> posZ(-30.0f, 30.0f);
-    std::uniform_real_distribution<float> scaleXZ(0.55f, 1.55f);
-    std::uniform_real_distribution<float> scaleY(0.55f, 1.35f);
+    std::uniform_real_distribution<float> scaleXZ(0.18f, 0.42f);
+    std::uniform_real_distribution<float> scaleY(0.16f, 0.34f);
     std::uniform_real_distribution<float> rotY(0.0f, 360.0f);
 
-    const int targetRockCount = 20;
+    const int targetRockCount = 14;
     int attempts = 0;
 
     while (rockInstances.size() < targetRockCount && attempts < 1000) {
@@ -1536,7 +1536,8 @@ void SceneBasic_Uniform::generateRockField()
 
         glm::vec3 scale(sx, sy, sz);
 
-        float y = getTerrainHeight(x, z) + 0.65f * sy;
+        float rockLocalMinY = -0.65f;
+        float y = getTerrainHeight(x, z) - (rockLocalMinY * sy);
 
         RockInstance rock;
         rock.position = glm::vec3(x, y, z);
