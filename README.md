@@ -80,7 +80,7 @@ This allows variation in surface appearance without relying entirely on static t
 
 AI tools were used during the development of this project as a support mechanism for debugging, technical clarification, and documentation structuring.
 
-AI Declaration Form
+[AI Declaration Form](https://github.com/JacksonHau/COMP3015-CW2/blob/main/AI%20declaration%20form/Student%20Declaration%20of%20AI%20Tool.pdf)
 
 Specifically, AI assistance was used for:
 - Debugging and understanding OpenGL-related issues  
