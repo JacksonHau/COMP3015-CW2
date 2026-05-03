@@ -6,6 +6,7 @@ using std::endl;
 
 #include <GLFW/glfw3.h>
 #include "helper/glutils.h"
+#include "helper/noisetex.h"
 
 #include <vector>
 #include <fstream>
@@ -71,7 +72,11 @@ void SceneBasic_Uniform::compile()
         prog.use();
         prog.setUniform("ShadowMap", 0);
         prog.setUniform("DiffuseTexture", 1);
+        prog.setUniform("NoiseTexture", 2);
         prog.setUniform("UseTexture", 0);
+        prog.setUniform("UseNoise", 0);
+        prog.setUniform("NoiseScale", 0.08f);
+        prog.setUniform("NoiseStrength", 0.25f);
 
         blurProg.use();
         blurProg.setUniform("image", 0);
@@ -197,6 +202,8 @@ void SceneBasic_Uniform::initScene()
 
     buildTerrain();
     grassTexture = loadTexture2D("assets/textures/grass.png");
+    noiseTexture = NoiseTex::generatePeriodic2DTex(8.0f, 0.55f, 256, 256);
+
     woodTexture = loadTexture2D("assets/textures/wood.jpg");
 
     rockTexture = loadTexture2D("assets/textures/rock.png");
@@ -350,7 +357,7 @@ void SceneBasic_Uniform::renderUI()
         glm::vec4(1.0f, 1.0f, 0.85f, 1.0f)
     );
 
-    std::string controls = "WASD Move | Shift Run | Space Jump | E Interact | B Bloom | P Pause";
+    std::string controls = "WASD Move | Shift Run | Space Jump | E Interact | B Bloom";
 
     renderText(
         22.0f,
@@ -921,12 +928,17 @@ void SceneBasic_Uniform::drawTerrain(GLSLProgram& shader, bool depthPass)
         glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(model)));
         shader.setUniform("NormalMatrix", normalMatrix);
 
-        // Slightly dark tint so the grass does not look neon
         shader.setUniform("ObjectColor", glm::vec3(0.45f, 0.55f, 0.38f));
         shader.setUniform("UseTexture", 1);
+        shader.setUniform("UseNoise", 1);
+        shader.setUniform("NoiseScale", 0.08f);
+        shader.setUniform("NoiseStrength", 0.25f);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, grassTexture);
+
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, noiseTexture);
     }
 
     glBindVertexArray(terrainVAO);
@@ -1125,6 +1137,7 @@ void SceneBasic_Uniform::drawRock(GLSLProgram& shader, bool depthPass, const glm
         shader.setUniform("NormalMatrix", normalMatrix);
         shader.setUniform("ObjectColor", glm::vec3(0.65f, 0.62f, 0.56f));
         shader.setUniform("UseTexture", 1);
+        shader.setUniform("UseNoise", 0);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, rockTexture);
@@ -1430,6 +1443,7 @@ void SceneBasic_Uniform::drawReactor(GLSLProgram& shader, bool depthPass, const 
 
         shader.setUniform("ObjectColor", reactorColor);
         shader.setUniform("UseTexture", 1);
+        shader.setUniform("UseNoise", 0);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, reactorTexture);
@@ -1597,6 +1611,7 @@ void SceneBasic_Uniform::drawEnergyCell(GLSLProgram& shader, bool depthPass, con
         shader.setUniform("NormalMatrix", normalMatrix);
         shader.setUniform("ObjectColor", cellColor);
         shader.setUniform("UseTexture", 0);
+        shader.setUniform("UseNoise", 0);
     }
 
     glBindVertexArray(energyCellVAO);
@@ -1621,6 +1636,7 @@ void SceneBasic_Uniform::renderScene(GLSLProgram& shader, bool depthPass)
                 shader.setUniform("NormalMatrix", normalMatrix);
                 shader.setUniform("ObjectColor", color);
                 shader.setUniform("UseTexture", 0);
+                shader.setUniform("UseNoise", 0);
             }
 
             glBindVertexArray(vaoHandle);

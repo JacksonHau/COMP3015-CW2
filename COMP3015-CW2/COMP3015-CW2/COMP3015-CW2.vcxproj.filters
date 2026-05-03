@@ -30,6 +30,9 @@
     <ClCompile Include="helper\glutils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="helper\noisetex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="scenebasic_uniform.h">
@@ -51,6 +54,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="helper\scenerunner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="helper\noisetex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

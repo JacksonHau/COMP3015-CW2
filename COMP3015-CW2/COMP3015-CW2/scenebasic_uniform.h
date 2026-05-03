@@ -70,6 +70,7 @@ private:
     GLsizei reactorVertexCount = 0;
     GLuint reactorTexture = 0;
     GLuint woodTexture = 0;
+    GLuint noiseTexture = 0;
 
     void drawReactor(GLSLProgram& shader, bool depthPass, const glm::vec3& position, const glm::vec3& scale, float rotationY);
 

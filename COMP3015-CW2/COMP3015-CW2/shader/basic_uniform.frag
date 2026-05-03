@@ -13,6 +13,11 @@ uniform sampler2D ShadowMap;
 uniform sampler2D DiffuseTexture;
 uniform int UseTexture;
 
+uniform sampler2D NoiseTexture;
+uniform int UseNoise;
+uniform float NoiseScale;
+uniform float NoiseStrength;
+
 uniform vec3 FogColor;
 uniform float FogStart;
 uniform float FogEnd;
@@ -49,6 +54,16 @@ void main()
         vec2 projectedUV = FragPos.xz * 0.45;
         vec3 textureColor = texture(DiffuseTexture, projectedUV).rgb;
         baseColor *= textureColor;
+    }
+
+    if (UseNoise == 1) {
+        vec2 noiseUV = FragPos.xz * NoiseScale;
+        vec4 noiseSample = texture(NoiseTexture, noiseUV);
+
+        float noiseValue = dot(noiseSample.rgb, vec3(0.3333));
+        float variation = mix(1.0 - NoiseStrength, 1.0 + NoiseStrength, noiseValue);
+
+        baseColor *= variation;
     }
 
     vec3 ambient = 0.35 * baseColor;
