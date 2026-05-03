@@ -76,6 +76,22 @@ A procedural noise texture is generated using the `noisetex` class.
 
 This allows variation in surface appearance without relying entirely on static textures, adding subtle realism to the scene.
 
+## AI Usage Declaration
+
+AI tools were used during the development of this project as a support mechanism for debugging, technical clarification, and documentation structuring.
+
+AI Declaration Form
+
+Specifically, AI assistance was used for:
+- Debugging and understanding OpenGL-related issues  
+- Clarifying shader, lighting, and rendering pipeline concepts  
+- Structuring and refining the README documentation  
+- Improving clarity and organisation of written explanations  
+
+All code, shader implementation, and system integration were developed independently. AI suggestions were critically evaluated, tested, and adapted before use.
+
+AI tools were used strictly as a support resource and not as a replacement for independent development.
+
 ## Assets used:
 Grass: https://opengameart.org/content/seamless-grass-texture-ii
 
