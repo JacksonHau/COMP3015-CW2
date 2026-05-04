@@ -1,7 +1,7 @@
 # COMP3015-CW2
 
 ## Video Demonstration
-YouTube link: https://youtu.be/25rbzkzvptY 
+YouTube link: https://youtu.be/H8lirmq60nk
 
 ## Project Overview
 This project is an OpenGL-based graphics application developed for COMP3015. It builds upon the initial prototype from Coursework 1 and extends it into a more complete rendering pipeline using multiple GLSL shader techniques.
